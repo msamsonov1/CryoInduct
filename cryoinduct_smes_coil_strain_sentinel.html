@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryoInduct: SMES Coil Strain Sentinel</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- MathJax v3 (Bulletproof Configuration) -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #05070d;
+            color: #e2e8f0;
+        }
+
+        .font-mono-code {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .formula-box {
+            background: #020617;
+            border: 1px solid #1e293b;
+            box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.6);
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b0f19;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #06b6d4;
+        }
+
+        .glow-cyan {
+            box-shadow: 0 0 15px -3px rgba(6, 182, 212, 0.35);
+        }
+
+        .glow-rose {
+            box-shadow: 0 0 15px -3px rgba(239, 68, 68, 0.45);
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col bg-[#05070d] text-slate-200 selection:bg-cyan-500 selection:text-black">
+
+    <!-- Top Navigation Header -->
+    <header class="border-b border-gray-800/80 bg-[#080c17]/90 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Brand Title -->
+                <div class="flex items-center space-x-3">
+                    <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-black font-black shadow-lg shadow-cyan-500/20">
+                        <i data-lucide="zap" class="w-5 h-5 text-slate-950"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-lg tracking-tight text-white">CRYO<span class="text-cyan-400">INDUCT</span></span>
+                            <span class="text-[10px] font-mono-code bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded uppercase tracking-wider font-semibold">NASA SBIR T4.02</span>
+                        </div>
+                        <p class="text-[11px] text-gray-400 font-mono-code hidden sm:block">SMES Dynamic Magneto-Mechanical Strain Sentinel</p>
+                    </div>
+                </div>
+
+                <!-- Navigation Tabs -->
+                <div class="flex items-center space-x-1 sm:space-x-2 bg-gray-950/70 p-1 rounded-xl border border-gray-800">
+                    <button id="tabBtnSim" onclick="switchTab('sim')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center space-x-1.5 bg-cyan-500 text-black font-semibold shadow-md">
+                        <i data-lucide="activity" class="w-3.5 h-3.5"></i>
+                        <span>Live Telemetry</span>
+                    </button>
+                    <button id="tabBtnPhysics" onclick="switchTab('physics')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center space-x-1.5 text-gray-400 hover:text-white hover:bg-gray-800/60">
+                        <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
+                        <span>Physics & Math</span>
+                    </button>
+                    <button id="tabBtnProposal" onclick="switchTab('proposal')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center space-x-1.5 text-gray-400 hover:text-white hover:bg-gray-800/60">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+                        <span>NASA STTR ($225k)</span>
+                    </button>
+                    <button id="tabBtnARR" onclick="switchTab('arr')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center space-x-1.5 text-gray-400 hover:text-white hover:bg-gray-800/60">
+                        <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+                        <span>Civil ARR ($245M)</span>
+                    </button>
+                </div>
+
+                <!-- Quick Status Indicator -->
+                <div class="hidden lg:flex items-center space-x-3">
+                    <div id="topStatusBadge" class="flex items-center space-x-2 px-3 py-1 rounded-full border border-emerald-500/30 bg-emerald-950/30 text-emerald-400 text-xs font-mono-code">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span id="topStatusText">NOMINAL HOOP STRAIN</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Containers -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+        <!-- ========================================== -->
+        <!-- TAB 1: LIVE SIMULATION & TELEMETRY HUD -->
+        <!-- ========================================== -->
+        <div id="viewSim" class="space-y-6">
+            <!-- Top Control & Status Row -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                <!-- Status & Telemetry Summary -->
+                <div class="bg-gray-900/60 border border-gray-800 p-4 rounded-xl backdrop-blur flex flex-col justify-between">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs uppercase tracking-wider text-gray-400 font-mono-code">Cryostat Core Temp</span>
+                        <span class="text-xs font-mono-code px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">HTS REBCO</span>
+                    </div>
+                    <div class="flex items-baseline space-x-2">
+                        <span id="tempMetric" class="text-2xl font-bold font-mono-code text-cyan-300">20.4</span>
+                        <span class="text-xs text-gray-400">K (-252.7 °C)</span>
+                    </div>
+                    <div class="w-full bg-gray-800 h-1.5 rounded-full mt-3 overflow-hidden">
+                        <div id="tempBar" class="bg-cyan-500 h-full w-[28%] transition-all duration-300"></div>
+                    </div>
+                </div>
+
+                <div class="bg-gray-900/60 border border-gray-800 p-4 rounded-xl backdrop-blur flex flex-col justify-between">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs uppercase tracking-wider text-gray-400 font-mono-code">Ramp Current ($I$)</span>
+                        <span class="text-xs font-mono-code text-amber-400 font-semibold" id="bFieldMetric">4.82 T</span>
+                    </div>
+                    <div class="flex items-baseline space-x-2">
+                        <span id="currentMetric" class="text-2xl font-bold font-mono-code text-white">3,240</span>
+                        <span class="text-xs text-gray-400">Amperes (DC)</span>
+                    </div>
+                    <div class="text-[11px] font-mono-code text-gray-400 mt-2 flex justify-between">
+                        <span>Stored Energy: <span id="energyMetric" class="text-amber-300">26.2 MJ</span></span>
+                        <span>$\dot{I}$: <span id="diMetric">120 A/s</span></span>
+                    </div>
+                </div>
+
+                <div class="bg-gray-900/60 border border-gray-800 p-4 rounded-xl backdrop-blur flex flex-col justify-between">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs uppercase tracking-wider text-gray-400 font-mono-code">Lorentz Radial Force ($F_r$)</span>
+                        <span id="hoopStressMetric" class="text-xs font-mono-code text-cyan-400">184 MPa</span>
+                    </div>
+                    <div class="flex items-baseline space-x-2">
+                        <span id="forceMetric" class="text-2xl font-bold font-mono-code text-cyan-400">1.42</span>
+                        <span class="text-xs text-gray-400">Mega-Newtons (MN)</span>
+                    </div>
+                    <div class="text-[11px] font-mono-code text-gray-400 mt-2">
+                        Delamination Yield Threshold: <span class="text-rose-400 font-semibold">2.10 MN</span>
+                    </div>
+                </div>
+
+                <div class="bg-gray-900/60 border border-gray-800 p-4 rounded-xl backdrop-blur flex flex-col justify-between" id="sentinelStatusCard">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs uppercase tracking-wider text-gray-400 font-mono-code">Sentinel State Observer</span>
+                        <span id="delamRiskBadge" class="text-[10px] font-mono-code px-2 py-0.5 rounded bg-emerald-950 border border-emerald-700 text-emerald-300 font-bold">HEALTHY</span>
+                    </div>
+                    <div class="flex items-baseline space-x-2">
+                        <span id="inductanceMetric" class="text-2xl font-bold font-mono-code text-white">5.024</span>
+                        <span class="text-xs text-gray-400">Henry (H)</span>
+                    </div>
+                    <div class="text-[11px] font-mono-code flex items-center justify-between text-gray-400 mt-2">
+                        <span>$\Delta L / \Delta F$ Metric:</span>
+                        <span id="dlDfMetric" class="text-emerald-400 font-semibold">+0.012 H/MN</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Simulation Center: 2D Coil Canvas & Phase Space Scatter Chart -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Left: Canvas Animated Cross-Section -->
+                <div class="lg:col-span-5 bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden">
+                    <div class="flex items-center justify-between mb-3 z-10">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="crosshair" class="w-4 h-4 text-cyan-400"></i>
+                            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-200">Cryogenic SMES Coil Cross-Section</h2>
+                        </div>
+                        <span class="text-[11px] font-mono-code bg-gray-950 px-2.5 py-1 rounded-md border border-gray-800 text-gray-300">
+                            Pancake Solenoid: REBCO 2G-HTS
+                        </span>
+                    </div>
+
+                    <!-- Canvas Container -->
+                    <div class="relative w-full h-[320px] rounded-xl bg-[#03050a] border border-gray-800/80 overflow-hidden flex items-center justify-center">
+                        <canvas id="coilCanvas" class="w-full h-full"></canvas>
+                        
+                        <!-- Overlay Labels -->
+                        <div class="absolute bottom-2 left-2 text-[10px] font-mono-code bg-gray-950/80 backdrop-blur px-2 py-1 rounded border border-gray-800 text-gray-400">
+                            Radial Lorentz Vectors: <span class="text-cyan-400">Cyan Arrows</span> | Tape Strain: <span class="text-amber-400">Glow Gradient</span>
+                        </div>
+                        <div id="delamAlertOverlay" class="hidden absolute top-2 right-2 bg-rose-950/90 border border-rose-500 text-rose-200 text-xs px-3 py-1.5 rounded-lg font-mono-code flex items-center space-x-1.5 animate-pulse">
+                            <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-400"></i>
+                            <span>LAYER INTERFACE SEPARATION DETECTED</span>
+                        </div>
+                    </div>
+
+                    <!-- Hardware Status Badges below canvas -->
+                    <div class="grid grid-cols-3 gap-2 mt-4 text-center">
+                        <div class="p-2 rounded-lg bg-gray-950 border border-gray-800">
+                            <span class="text-[10px] text-gray-500 block uppercase">Winding Layers</span>
+                            <span class="text-xs font-mono-code text-cyan-400 font-semibold">48 Double Pancakes</span>
+                        </div>
+                        <div class="p-2 rounded-lg bg-gray-950 border border-gray-800">
+                            <span class="text-[10px] text-gray-500 block uppercase">Insulation Matrix</span>
+                            <span class="text-xs font-mono-code text-purple-400 font-semibold">Polyimide Dry-Wound</span>
+                        </div>
+                        <div class="p-2 rounded-lg bg-gray-950 border border-gray-800">
+                            <span class="text-[10px] text-gray-500 block uppercase">Inter-turn Shear</span>
+                            <span id="shearStatus" class="text-xs font-mono-code text-emerald-400 font-semibold">14.2 MPa (Safe)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Chart.js Dynamic Phase-Space Scatter Plot (Lorentz Force F vs Inductance L) -->
+                <div class="lg:col-span-7 bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col justify-between">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="scatter-chart" class="w-4 h-4 text-cyan-400"></i>
+                            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-200">
+                                Phase-Space: Radial Lorentz Force ($F_r$) vs Self-Inductance ($L$)
+                            </h2>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                            <span class="text-[11px] font-mono-code text-gray-400">Live Operating Point</span>
+                        </div>
+                    </div>
+
+                    <!-- Phase Chart Canvas -->
+                    <div class="relative w-full h-[320px] bg-[#03050a] rounded-xl border border-gray-800/80 p-2">
+                        <canvas id="phaseChart"></canvas>
+                    </div>
+
+                    <!-- Chart Annotation & Insight Bar -->
+                    <div class="mt-3 bg-gray-950/80 border border-gray-800 rounded-lg p-2.5 text-xs text-gray-300 font-mono-code flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="info" class="w-4 h-4 text-cyan-400 flex-shrink-0"></i>
+                            <span>Elastic slope: $L(F) = L_0 [1 + 2\frac{F}{2\pi R E A}]$. Sudden positive jump in $\frac{dL}{dF}$ flags delamination.</span>
+                        </div>
+                        <span id="slopeIndicator" class="text-cyan-400 font-bold ml-2">Elastic Linear</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Closed-Loop Interactive Control Panel & Secondary Telemetry -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Left: Operational Controls -->
+                <div class="lg:col-span-5 bg-gray-900/40 border border-gray-800 rounded-2xl p-5 space-y-5">
+                    <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="sliders" class="w-4 h-4 text-cyan-400"></i>
+                            <h3 class="text-sm font-semibold text-white">Closed-Loop SMES Controller</h3>
+                        </div>
+                        <span id="controllerModeBadge" class="text-[11px] font-mono-code px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">
+                            AUTO-SENTINEL ACTIVE
+                        </span>
+                    </div>
+
+                    <!-- Current Ramp Slider -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1 text-xs font-mono-code">
+                            <span class="text-gray-300">Target Coil Current ($I_{\text{target}}$)</span>
+                            <span id="sliderCurrentVal" class="text-cyan-400 font-bold">3,240 A</span>
+                        </div>
+                        <input type="range" id="currentSlider" min="0" max="6000" step="50" value="3240" 
+                            class="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                        <div class="flex justify-between text-[10px] text-gray-500 font-mono-code mt-1">
+                            <span>0 A (Discharged)</span>
+                            <span>3,500 A (Nominal Lunar Grid)</span>
+                            <span>6,000 A (Extreme Payload)</span>
+                        </div>
+                    </div>
+
+                    <!-- Ramp Rate Control -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1 text-xs font-mono-code">
+                            <span class="text-gray-300">Ramp Velocity ($\dot{I}$)</span>
+                            <span id="sliderRateVal" class="text-amber-400 font-bold">120 A/s</span>
+                        </div>
+                        <input type="range" id="rateSlider" min="20" max="500" step="10" value="120" 
+                            class="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                    </div>
+
+                    <!-- Fault Injection & Closed Loop Actions -->
+                    <div class="pt-2 border-t border-gray-800/80 space-y-3">
+                        <label class="text-xs text-gray-400 font-mono-code block">Stress Injection & Grid Protection Simulation</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button id="btnInjectDelam" onclick="injectDelaminationFault()" class="px-3 py-2 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/80 rounded-xl text-xs font-mono-code text-rose-300 flex items-center justify-center space-x-1.5 transition">
+                                <i data-lucide="zap-off" class="w-3.5 h-3.5"></i>
+                                <span>Trigger Delamination</span>
+                            </button>
+                            <button id="btnTripDump" onclick="triggerFastDump()" class="px-3 py-2 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/80 rounded-xl text-xs font-mono-code text-amber-300 flex items-center justify-center space-x-1.5 transition">
+                                <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
+                                <span>Fast Dump (Quench Prot.)</span>
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between text-xs font-mono-code pt-1">
+                            <span class="text-gray-400">Autonomous Sentinel Interlock:</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="autoSentinelToggle" checked class="sr-only peer">
+                                <div class="w-9 h-5 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Dual Secondary Time-Series Charts -->
+                <div class="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Secondary Plot 1: Dynamic Inductance vs Time -->
+                    <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col justify-between">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-mono-code text-gray-300 flex items-center space-x-1">
+                                <i data-lucide="line-chart" class="w-3.5 h-3.5 text-cyan-400"></i>
+                                <span>$L(t)$ Dynamic Inductance [H]</span>
+                            </span>
+                            <span id="tsInductanceVal" class="text-xs font-mono-code text-cyan-400 font-bold">5.024 H</span>
+                        </div>
+                        <div class="w-full h-[180px] bg-[#03050a] rounded-xl border border-gray-800/80 p-2">
+                            <canvas id="timeSeriesLChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Secondary Plot 2: Total Radial Force vs Time -->
+                    <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col justify-between">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-mono-code text-gray-300 flex items-center space-x-1">
+                                <i data-lucide="activity" class="w-3.5 h-3.5 text-amber-400"></i>
+                                <span>$F_r(t)$ Total Hoop Force [MN]</span>
+                            </span>
+                            <span id="tsForceVal" class="text-xs font-mono-code text-amber-400 font-bold">1.42 MN</span>
+                        </div>
+                        <div class="w-full h-[180px] bg-[#03050a] rounded-xl border border-gray-800/80 p-2">
+                            <canvas id="timeSeriesFChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: CORE PHYSICS & MATHEMATICAL MODEL -->
+        <!-- ========================================== -->
+        <div id="viewPhysics" class="hidden space-y-6">
+            <!-- Header Summary Card -->
+            <div class="bg-gradient-to-r from-blue-950/40 via-cyan-950/30 to-purple-950/40 border border-cyan-800/50 rounded-2xl p-6">
+                <div class="flex items-center space-x-3 mb-2">
+                    <span class="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                        <i data-lucide="atom" class="w-6 h-6"></i>
+                    </span>
+                    <div>
+                        <h2 class="text-lg font-bold text-white tracking-wide">Dynamic Magneto-Mechanical Coupled Inversion in HTS Solenoids</h2>
+                        <p class="text-xs font-mono-code text-cyan-300">Constitutive Relations: Maxwell-Lorentz Mechanics Coupled to Elastic Ring Dilatation</p>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-300 leading-relaxed mt-2">
+                    In Superconducting Magnetic Energy Storage (SMES) coils wound with second-generation rare-earth barium copper oxide (2G HTS REBCO) tapes, current densities reach hundreds of amperes per square millimeter. The cross product of winding current $\mathbf{J}$ and self-generated magnetic flux density $\mathbf{B}$ imposes outward radial body forces. Under elastic hoop stress, the solenoid expands uniformly. However, tape delamination causes immediate radial gap formation, discontinuous increase in cross-sectional enclosed magnetic flux area $A$, and a signature step change in incremental self-inductance $\frac{\partial L}{\partial F}$.
+                </p>
+            </div>
+
+            <!-- 4 Detailed Scientific Architecture Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Card 1: Electromagnetic & Lorentz Force Formulations -->
+                <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 mb-3">
+                            <span class="w-6 h-6 rounded-full bg-cyan-950 border border-cyan-700 flex items-center justify-center text-xs font-bold text-cyan-400">1</span>
+                            <h3 class="text-sm font-semibold text-white uppercase tracking-wider">Lorentz Body Force & Hoop Stress Distribution</h3>
+                        </div>
+                        <p class="text-xs text-gray-300 mb-3 leading-relaxed">
+                            The local body force density $\mathbf{f}_L$ inside the tape packs is governed by the Lorentz relation. In cylindrical coordinates $(r, \theta, z)$, with azimuthal transport current $J_\theta$ and axial magnetic flux $B_z$:
+                        </p>
+                        <div class="formula-box p-3 rounded-lg text-center text-cyan-300 text-sm overflow-x-auto my-2">
+                            $$\mathbf{f}_L = \mathbf{J} \times \mathbf{B} = J_\theta B_z(r,z) \,\hat{\mathbf{r}} - J_\theta B_r(r,z) \,\hat{\mathbf{z}}$$
+                        </div>
+                        <p class="text-xs text-gray-300 my-2 leading-relaxed">
+                            Integrating over the active coil volume $V_c$ yields the integrated radial outward hoop force $F_r$, producing circumferential hoop tension $\sigma_\theta$:
+                        </p>
+                        <div class="formula-box p-3 rounded-lg text-center text-cyan-300 text-sm overflow-x-auto my-2">
+                            $$\sigma_\theta(r) = \frac{F_r}{2\pi t_w h_w} = \frac{1}{t_w h_w} \int_0^h \int_{R_{\text{in}}}^{R_{\text{out}}} J_\theta(r) B_z(r,z) r \, dr \, dz$$
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] font-mono-code text-gray-400">
+                        Critical REBCO Limit: Delamination occurs when radial peel stress $\sigma_r \ge 25 \text{ MPa}$ or transverse tension $\sigma_c \ge 400 \text{ MPa}$.
+                    </div>
+                </div>
+
+                <!-- Card 2: Geometric Coil Inductance & Strain Dilatation -->
+                <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 mb-3">
+                            <span class="w-6 h-6 rounded-full bg-blue-950 border border-blue-700 flex items-center justify-center text-xs font-bold text-blue-400">2</span>
+                            <h3 class="text-sm font-semibold text-white uppercase tracking-wider">Geometric Self-Inductance Dilatation Coupling</h3>
+                        </div>
+                        <p class="text-xs text-gray-300 mb-3 leading-relaxed">
+                            The nominal self-inductance $L_0$ of a multi-turn solenoid with radius $R$, length $l_c$, turn count $N$, and Nagaoka coefficient $K_N$ satisfies:
+                        </p>
+                        <div class="formula-box p-3 rounded-lg text-center text-cyan-300 text-sm overflow-x-auto my-2">
+                            $$L_0 = \mu_0 N^2 \frac{\pi R^2}{l_c} K_N\left(\frac{2R}{l_c}\right)$$
+                        </div>
+                        <p class="text-xs text-gray-300 my-2 leading-relaxed">
+                            Under elastic strain $\varepsilon_\theta = \frac{\Delta R}{R} = \frac{\sigma_\theta}{E_{\text{composite}}}$, the radius dilates. Taking the first derivative with respect to Lorentz radial force $F_r$:
+                        </p>
+                        <div class="formula-box p-3 rounded-lg text-center text-cyan-300 text-sm overflow-x-auto my-2">
+                            $$\frac{\partial L}{\partial F_r} = L_0 \left[ \frac{2}{R}\frac{\partial R}{\partial F_r} - \frac{1}{l_c}\frac{\partial l_c}{\partial F_r} \right] \approx \frac{2 L_0}{2\pi R \cdot (E A)_{\text{equiv}}}$$
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] font-mono-code text-gray-400">
+                        Baseline Elasticity: Linear, predictable slope $\frac{\partial L}{\partial F}$ dictated purely by Young's modulus of Hastelloy C-276 substrate.
+                    </div>
+                </div>
+
+                <!-- Card 3: The Sentinel Inversion Observer Algorithm -->
+                <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 mb-3">
+                            <span class="w-6 h-6 rounded-full bg-purple-950 border border-purple-700 flex items-center justify-center text-xs font-bold text-purple-400">3</span>
+                            <h3 class="text-sm font-semibold text-white uppercase tracking-wider">State Observer Inversion & Delamination Discontinuity</h3>
+                        </div>
+                        <p class="text-xs text-gray-300 mb-3 leading-relaxed">
+                            Terminal terminal voltage $V(t)$, current $I(t)$, and shunt resistance $R_s$ provide real-time dynamic inductance tracking without invasive interior optical fibers:
+                        </p>
+                        <div class="formula-box p-3 rounded-lg text-center text-cyan-300 text-sm overflow-x-auto my-2">
+                            $$L_{\text{meas}}(t) = \frac{V(t) - I(t) R_{\text{joint}} - \sum M_{ij}\frac{dI_j}{dt}}{\frac{dI}{dt}}$$
+                        </div>
+                        <p class="text-xs text-gray-300 my-2 leading-relaxed">
+                            When inter-layer epoxy or solder matrix shears (delamination), the outer tape turns snap outward by gap distance $\delta_{\text{sep}}$, inducing an instantaneous jump:
+                        </p>
+                        <div class="formula-box p-3 rounded-lg text-center text-cyan-300 text-sm overflow-x-auto my-2">
+                            $$\Delta L_{\text{delam}} = \mu_0 N_{\text{outer}}^2 \frac{\pi \left[(R + \delta_{\text{sep}})^2 - R^2\right]}{l_c} > \xi_{\text{threshold}}$$
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] font-mono-code text-gray-400">
+                        Sentinel Criterion: If $\frac{d^2 L}{d F^2} \ge \Gamma_{\text{crit}}$, trigger gate-turn-off thyristors within 8 milliseconds.
+                    </div>
+                </div>
+
+                <!-- Card 4: Hardware & Cryostat Microgrid Specifications -->
+                <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 mb-3">
+                            <span class="w-6 h-6 rounded-full bg-emerald-950 border border-emerald-700 flex items-center justify-center text-xs font-bold text-emerald-400">4</span>
+                            <h3 class="text-sm font-semibold text-white uppercase tracking-wider">Substrate & Lunar Cryocooler Integration</h3>
+                        </div>
+                        <div class="space-y-2 text-xs font-mono-code text-gray-300">
+                            <div class="flex justify-between py-1 border-b border-gray-800">
+                                <span class="text-gray-400">Conductor Architecture:</span>
+                                <span class="text-cyan-300">SuperPower 12mm 2G-REBCO Tape</span>
+                            </div>
+                            <div class="flex justify-between py-1 border-b border-gray-800">
+                                <span class="text-gray-400">Substrate Core:</span>
+                                <span class="text-cyan-300">Hastelloy C-276 (50 $\mu$m)</span>
+                            </div>
+                            <div class="flex justify-between py-1 border-b border-gray-800">
+                                <span class="text-gray-400">Critical Temp $T_c$:</span>
+                                <span class="text-cyan-300">93.0 K (Operating @ 20.0 K Brayton)</span>
+                            </div>
+                            <div class="flex justify-between py-1 border-b border-gray-800">
+                                <span class="text-gray-400">Yield Strength ($R_{p0.2}$):</span>
+                                <span class="text-cyan-300">1,200 MPa @ 77 K</span>
+                            </div>
+                            <div class="flex justify-between py-1 border-b border-gray-800">
+                                <span class="text-gray-400">Sampling Bandwidth:</span>
+                                <span class="text-cyan-300">50 kHz FPGA Delta-Sigma ADC</span>
+                            </div>
+                            <div class="flex justify-between py-1">
+                                <span class="text-gray-400">Quench Quench Dump Time:</span>
+                                <span class="text-cyan-300">14.8 ms into Varistor Resistor</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] font-mono-code text-gray-400">
+                        Zero interior sensors required inside vacuum cryostat: relies entirely on non-invasive terminal electromagnetic interrogation.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 3: NASA SBIR/STTR PROPOSAL BRIEF -->
+        <!-- ========================================== -->
+        <div id="viewProposal" class="hidden space-y-6">
+            <!-- Solicitation Header -->
+            <div class="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 relative overflow-hidden">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-800 pb-5">
+                    <div>
+                        <div class="flex items-center space-x-2 mb-1">
+                            <span class="px-2.5 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-700 text-xs font-mono-code font-bold">
+                                NASA SBIR/STTR 2026 Solicitations
+                            </span>
+                            <span class="px-2.5 py-0.5 rounded bg-cyan-900/60 text-cyan-300 border border-cyan-700 text-xs font-mono-code">
+                                Topic T4.02: Space Power & Energy Storage
+                            </span>
+                        </div>
+                        <h2 class="text-xl font-bold text-white tracking-tight">
+                            CryoInduct: Contactless Magneto-Mechanical Strain Sentinel for Ultra-High-Field SMES Coils
+                        </h2>
+                        <p class="text-xs text-gray-400 font-mono-code mt-1">
+                            Phase I Total Budget: $225,000 | Period of Performance: 6 Months (Oct 2026 – Mar 2027)
+                        </p>
+                    </div>
+                    <div class="text-right sm:border-l sm:border-gray-800 sm:pl-6">
+                        <span class="text-xs text-gray-500 font-mono-code block">STTR Research Partner</span>
+                        <span class="text-base font-bold text-cyan-400 font-mono-code">UCF CATER Labs</span>
+                        <span class="text-xs text-emerald-400 block font-mono-code">30.0% Subcontract ($67,500)</span>
+                    </div>
+                </div>
+
+                <!-- 4 Milestones Breakdown Table -->
+                <div class="mt-6">
+                    <h3 class="text-xs font-semibold text-gray-300 uppercase tracking-wider font-mono-code mb-4">
+                        Phase I Work Breakdown Structure & Milestones
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="bg-gray-950/80 border border-gray-800 rounded-xl p-4 flex flex-col justify-between">
+                            <div>
+                                <span class="text-[11px] font-mono-code text-cyan-400 font-bold block mb-1">M1: Months 1–2</span>
+                                <h4 class="text-sm font-semibold text-white mb-2">Coupled Multi-Physics Modeling</h4>
+                                <p class="text-xs text-gray-400 leading-relaxed">
+                                    Coupled 2D axisymmetric finite-element formulation of REBCO HTS tape orthotropic elasticity under anisotropic self-magnetic fields up to 15 Tesla.
+                                </p>
+                            </div>
+                            <span class="text-[10px] font-mono-code text-gray-500 mt-3 pt-2 border-t border-gray-900">Deliverable: Validated FEA Model</span>
+                        </div>
+
+                        <div class="bg-gray-950/80 border border-gray-800 rounded-xl p-4 flex flex-col justify-between">
+                            <div>
+                                <span class="text-[11px] font-mono-code text-cyan-400 font-bold block mb-1">M2: Months 3–4</span>
+                                <h4 class="text-sm font-semibold text-white mb-2">Inverse Sentinel Observer</h4>
+                                <p class="text-xs text-gray-400 leading-relaxed">
+                                    Formulation of the real-time Kalman state estimator extracting instantaneous $\partial L / \partial F_r$ from 50 kHz current and voltage telemetry without cryostat sensor penetrations.
+                                </p>
+                            </div>
+                            <span class="text-[10px] font-mono-code text-gray-500 mt-3 pt-2 border-t border-gray-900">Deliverable: Inversion Kernel</span>
+                        </div>
+
+                        <div class="bg-gray-950/80 border border-gray-800 rounded-xl p-4 flex flex-col justify-between">
+                            <div>
+                                <span class="text-[11px] font-mono-code text-cyan-400 font-bold block mb-1">M3: Month 5</span>
+                                <h4 class="text-sm font-semibold text-white mb-2">Hardware-in-the-Loop (HIL)</h4>
+                                <p class="text-xs text-gray-400 leading-relaxed">
+                                    Benchtop demonstration at UCF CATER vacuum cryostat using subscale 5-kA pulsed current supplies and deliberately stressed dummy test coils.
+                                </p>
+                            </div>
+                            <span class="text-[10px] font-mono-code text-gray-500 mt-3 pt-2 border-t border-gray-900">Deliverable: Testbed Verification</span>
+                        </div>
+
+                        <div class="bg-gray-950/80 border border-gray-800 rounded-xl p-4 flex flex-col justify-between">
+                            <div>
+                                <span class="text-[11px] font-mono-code text-cyan-400 font-bold block mb-1">M4: Month 6</span>
+                                <h4 class="text-sm font-semibold text-white mb-2">Phase II Transition Package</h4>
+                                <p class="text-xs text-gray-400 leading-relaxed">
+                                    Full hardware specification for a 100-MJ lunar microgrid prototype with autonomous active dump thyristor arrays and flight-ready radiation-hardened DSP architecture.
+                                </p>
+                            </div>
+                            <span class="text-[10px] font-mono-code text-gray-500 mt-3 pt-2 border-t border-gray-900">Deliverable: Phase II Proposal</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Budget Breakdown & Partner Allocation -->
+                <div class="mt-6 pt-5 border-t border-gray-800 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="p-3 bg-gray-950 rounded-xl border border-gray-800">
+                        <span class="text-xs text-gray-400 font-mono-code block">Direct Labor & Software (Prime)</span>
+                        <span class="text-lg font-bold text-white font-mono-code">$112,500</span>
+                        <span class="text-[10px] text-gray-500 block">50.0% Allocation (Algorithmic Core)</span>
+                    </div>
+                    <div class="p-3 bg-gray-950 rounded-xl border border-gray-800">
+                        <span class="text-xs text-gray-400 font-mono-code block">STTR Research Partner (UCF CATER)</span>
+                        <span class="text-lg font-bold text-cyan-400 font-mono-code">$67,500</span>
+                        <span class="text-[10px] text-gray-500 block">30.0% Allocation (Cryogenic Testing)</span>
+                    </div>
+                    <div class="p-3 bg-gray-950 rounded-xl border border-gray-800">
+                        <span class="text-xs text-gray-400 font-mono-code block">Hardware, Compute & Indirect</span>
+                        <span class="text-lg font-bold text-purple-400 font-mono-code">$45,000</span>
+                        <span class="text-[10px] text-gray-500 block">20.0% Allocation (FPGA Racks & Materials)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 4: COMMERCIAL & NATIONWIDE ARR -->
+        <!-- ========================================== -->
+        <div id="viewARR" class="hidden space-y-6">
+            <!-- Executive Pitch Card -->
+            <div class="bg-gray-900/60 border border-gray-800 rounded-2xl p-6">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-5">
+                    <div>
+                        <span class="text-xs font-mono-code text-cyan-400 uppercase tracking-wider font-bold">Executive Commercial Thesis</span>
+                        <h2 class="text-xl font-bold text-white tracking-tight mt-1">
+                            Protecting the World's High-Field Superconducting Magnets from Catastrophic Mechanical Quench
+                        </h2>
+                        <p class="text-xs text-gray-400 font-mono-code mt-1">
+                            Civil Enterprise Total Addressable Revenue: <span class="text-emerald-400 font-bold">$245.5M Mature SaaS / Licensing ARR</span>
+                        </p>
+                    </div>
+                    <div class="bg-gray-950 border border-cyan-800/60 px-5 py-3 rounded-xl text-right">
+                        <span class="text-[11px] text-gray-400 font-mono-code block">Enterprise Value (@ 10x Multiple)</span>
+                        <span class="text-2xl font-black text-cyan-400 font-mono-code">$2.45 Billion</span>
+                    </div>
+                </div>
+
+                <!-- ARR Distribution Table -->
+                <div class="mt-6 overflow-x-auto">
+                    <table class="w-full text-left text-xs font-mono-code">
+                        <thead class="bg-gray-950 text-gray-400 border-b border-gray-800">
+                            <tr>
+                                <th class="p-3">Commercial Sector</th>
+                                <th class="p-3">Target Asset Base</th>
+                                <th class="p-3">Pricing Metric / License</th>
+                                <th class="p-3">Total Asset Units</th>
+                                <th class="p-3 text-right">Mature Annual ARR</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-800/60 text-gray-300">
+                            <tr class="hover:bg-gray-800/30">
+                                <td class="p-3 font-semibold text-white">Commercial Fusion Power Plants</td>
+                                <td class="p-3">Tokamak & Stellarator HTS TF Coils</td>
+                                <td class="p-3">$350,000 / reactor / yr</td>
+                                <td class="p-3">180 Pilot & Grid Reactors</td>
+                                <td class="p-3 text-right font-bold text-cyan-400">$63.0M</td>
+                            </tr>
+                            <tr class="hover:bg-gray-800/30">
+                                <td class="p-3 font-semibold text-white">Lunar Microgrid Energy Storage</td>
+                                <td class="p-3">NASA Artemis & Commercial Landers</td>
+                                <td class="p-3">$180,000 / SMES unit / yr</td>
+                                <td class="p-3">125 Lunar & Orbital Bases</td>
+                                <td class="p-3 text-right font-bold text-cyan-400">$22.5M</td>
+                            </tr>
+                            <tr class="hover:bg-gray-800/30">
+                                <td class="p-3 font-semibold text-white">Terrestrial Utility SMES Buffers</td>
+                                <td class="p-3">Fast-Frequency Response Sub-stations</td>
+                                <td class="p-3">$45,000 / grid node / yr</td>
+                                <td class="p-3">1,600 Grid Interconnects</td>
+                                <td class="p-3 text-right font-bold text-cyan-400">$72.0M</td>
+                            </tr>
+                            <tr class="hover:bg-gray-800/30">
+                                <td class="p-3 font-semibold text-white">Electric Aircraft Propulsion</td>
+                                <td class="p-3">Cryogenic Superconducting Motors</td>
+                                <td class="p-3">$15,000 / aircraft nacelle / yr</td>
+                                <td class="p-3">3,200 Commercial H2 Airframes</td>
+                                <td class="p-3 text-right font-bold text-cyan-400">$48.0M</td>
+                            </tr>
+                            <tr class="hover:bg-gray-800/30">
+                                <td class="p-3 font-semibold text-white">Semiconductor High-Field Magnets</td>
+                                <td class="p-3">High-Field Magnetic Czochralski (MCZ)</td>
+                                <td class="p-3">$20,000 / puller furnace / yr</td>
+                                <td class="p-3">1,100 Silicon Crystal Pullers</td>
+                                <td class="p-3 text-right font-bold text-cyan-400">$22.0M</td>
+                            </tr>
+                            <tr class="hover:bg-gray-800/30">
+                                <td class="p-3 font-semibold text-white">Ultra-High-Field Clinical MRI</td>
+                                <td class="p-3">7T and 11.7T Whole-Body Scanners</td>
+                                <td class="p-3">$12,000 / scanner suite / yr</td>
+                                <td class="p-3">1,500 Academic Medical Centers</td>
+                                <td class="p-3 text-right font-bold text-cyan-400">$18.0M</td>
+                            </tr>
+                            <tr class="bg-cyan-950/20 font-bold text-white">
+                                <td class="p-3">TOTAL NATIONWIDE ADDRESSABLE ARR</td>
+                                <td class="p-3">6 Core High-Field Verticals</td>
+                                <td class="p-3">Pure-Play Software Sentinel</td>
+                                <td class="p-3">7,705 Active Magnets</td>
+                                <td class="p-3 text-right font-mono-code text-cyan-300 text-sm">$245.5M / yr</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Detailed Industry Deep Dive Cards (6 Verticals) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <!-- Vertical 1 -->
+                <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 text-cyan-400 mb-2">
+                            <i data-lucide="flame" class="w-4 h-4"></i>
+                            <h3 class="text-sm font-semibold text-white">1. Commercial Fusion Tokamaks</h3>
+                        </div>
+                        <p class="text-xs text-gray-300 mb-2 leading-relaxed">
+                            <strong class="text-cyan-300 font-mono-code">The Physics in 1 Sentence:</strong> 20+ Tesla magnetic cages generate gigapascal-class centering forces that tear apart tape laminate bonding during plasma disrupt transients.
+                        </p>
+                        <p class="text-xs text-gray-400 leading-relaxed">
+                            <strong class="text-amber-300 font-mono-code">Why Others Missed This:</strong> Incumbents rely on external pickup coils and fiber-Bragg gratings which fail under neutron flux and suffer from thermal lag. CryoInduct uses inherent coil self-inductance as the sensor.
+                        </p>
+                    </div>
+                    <span class="text-[10px] font-mono-code text-cyan-500 mt-4 block">ARR Target: $63.0M / yr</span>
+                </div>
+
+                <!-- Vertical 2 -->
+                <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 text-cyan-400 mb-2">
+                            <i data-lucide="moon" class="w-4 h-4"></i>
+                            <h3 class="text-sm font-semibold text-white">2. Lunar Artemis Microgrids</h3>
+                        </div>
+                        <p class="text-xs text-gray-300 mb-2 leading-relaxed">
+                            <strong class="text-cyan-300 font-mono-code">The Physics in 1 Sentence:</strong> Lunar night energy survival demands 10,000+ cycle rapid charge/discharge SMES units enduring massive repeated hoop-stress cyclic fatigue.
+                        </p>
+                        <p class="text-xs text-gray-400 leading-relaxed">
+                            <strong class="text-amber-300 font-mono-code">Why Others Missed This:</strong> Standard battery chemistries freeze below 200 K, while SMES thrives at lunar 20–40 K temperatures; CryoInduct enables autonomous uncrewed fault prevention without human inspectors.
+                        </p>
+                    </div>
+                    <span class="text-[10px] font-mono-code text-cyan-500 mt-4 block">ARR Target: $22.5M / yr</span>
+                </div>
+
+                <!-- Vertical 3 -->
+                <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 text-cyan-400 mb-2">
+                            <i data-lucide="zap" class="w-4 h-4"></i>
+                            <h3 class="text-sm font-semibold text-white">3. Terrestrial Utility Fast Buffers</h3>
+                        </div>
+                        <p class="text-xs text-gray-300 mb-2 leading-relaxed">
+                            <strong class="text-cyan-300 font-mono-code">The Physics in 1 Sentence:</strong> Millisecond synthetic inertia injection into low-inertia solar/wind grids demands multi-megawatt burst ramping that shocks magnet mechanical frames.
+                        </p>
+                        <p class="text-xs text-gray-400 leading-relaxed">
+                            <strong class="text-amber-300 font-mono-code">Why Others Missed This:</strong> Legacy substations use slow acoustic emission sensors susceptible to ambient vibration and switchgear noise; our algorithm calculates true structural inductance directly from power terminals.
+                        </p>
+                    </div>
+                    <span class="text-[10px] font-mono-code text-cyan-500 mt-4 block">ARR Target: $72.0M / yr</span>
+                </div>
+
+                <!-- Vertical 4 -->
+                <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 text-cyan-400 mb-2">
+                            <i data-lucide="plane" class="w-4 h-4"></i>
+                            <h3 class="text-sm font-semibold text-white">4. Electric Aviation Cryo-Motors</h3>
+                        </div>
+                        <p class="text-xs text-gray-300 mb-2 leading-relaxed">
+                            <strong class="text-cyan-300 font-mono-code">The Physics in 1 Sentence:</strong> Takeoff thrust surges generate violent centrifugal and magnetic shear stresses in liquid-hydrogen cooled rotor windings.
+                        </p>
+                        <p class="text-xs text-gray-400 leading-relaxed">
+                            <strong class="text-amber-300 font-mono-code">Why Others Missed This:</strong> Aviation cannot accept heavy redundant sensor wiring harnesses inside high-speed rotating cryogenic spindles; our algorithm runs entirely within the electronic drive inverter.
+                        </p>
+                    </div>
+                    <span class="text-[10px] font-mono-code text-cyan-500 mt-4 block">ARR Target: $48.0M / yr</span>
+                </div>
+
+                <!-- Vertical 5 -->
+                <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 text-cyan-400 mb-2">
+                            <i data-lucide="cpu" class="w-4 h-4"></i>
+                            <h3 class="text-sm font-semibold text-white">5. Semiconductor Czochralski Furnaces</h3>
+                        </div>
+                        <p class="text-xs text-gray-300 mb-2 leading-relaxed">
+                            <strong class="text-cyan-300 font-mono-code">The Physics in 1 Sentence:</strong> Continuous 300mm silicon ingot pulling requires zero-quench superconducting horizontal magnetic fields holding molten convection completely static.
+                        </p>
+                        <p class="text-xs text-gray-400 leading-relaxed">
+                            <strong class="text-amber-300 font-mono-code">Why Others Missed This:</strong> Fab operators fear $2M ruined crystal batches if a magnet abruptly quenches; CryoInduct alerts 200 milliseconds in advance to allow controlled power ramping down.
+                        </p>
+                    </div>
+                    <span class="text-[10px] font-mono-code text-cyan-500 mt-4 block">ARR Target: $22.0M / yr</span>
+                </div>
+
+                <!-- Vertical 6 -->
+                <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 text-cyan-400 mb-2">
+                            <i data-lucide="stethoscope" class="w-4 h-4"></i>
+                            <h3 class="text-sm font-semibold text-white">6. Ultra-High Field 7T/11.7T MRI</h3>
+                        </div>
+                        <p class="text-xs text-gray-300 mb-2 leading-relaxed">
+                            <strong class="text-cyan-300 font-mono-code">The Physics in 1 Sentence:</strong> High-gradient imaging pulses induce relentless acoustic Lorentz cycling that degrades inner-bore superconducting joint shunts over years.
+                        </p>
+                        <p class="text-xs text-gray-400 leading-relaxed">
+                            <strong class="text-amber-300 font-mono-code">Why Others Missed This:</strong> Legacy MRI maintenance is reactive (cryogen boil-off vents after quench); our system provides predictive life extension as an over-the-air firmware update.
+                        </p>
+                    </div>
+                    <span class="text-[10px] font-mono-code text-cyan-500 mt-4 block">ARR Target: $18.0M / yr</span>
+                </div>
+            </div>
+
+            <!-- Contact Callout -->
+            <div class="bg-cyan-950/20 border border-cyan-800/40 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between text-xs font-mono-code text-gray-300">
+                <span>Direct Collaboration & Commercial Licensing: <strong class="text-cyan-400">support@rfwavecode.com</strong></span>
+                <span class="text-gray-500 mt-2 sm:mt-0">Deep-Tech Technology Transfer Group | Alexandria, VA</span>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Bottom Application Footer -->
+    <footer class="border-t border-gray-800/80 bg-[#04060b] py-3 text-center text-xs font-mono-code text-gray-500">
+        CryoInduct: Superconducting Magnetic Energy Storage Coil Strain Sentinel &bull; NASA STTR Topic T4.02 &bull; UCF CATER Partnership &bull; support@rfwavecode.com
+    </footer>
+
+    <!-- JAVASCRIPT APPLICATION LOGIC & CHARTS -->
+    <script>
+        // ==========================================
+        // STATE DECLARATIONS & PHYSICS ENGINE
+        // ==========================================
+        const state = {
+            activeTab: 'sim',
+            current: 3240,         // Amperes
+            targetCurrent: 3240,   // Target Amperes
+            rampRate: 120,         // A/s
+            L0: 5.0,               // Base Inductance in Henry
+            measuredL: 5.024,      // Real-time measured Inductance (H)
+            lorentzForce: 1.42,    // Radial Force (MegaNewtons)
+            hoopStress: 184,       // MPa
+            temp: 20.4,            // Kelvin
+            isDelaminated: false,  // Delamination fault flag
+            delamMagnitude: 0,     // Additional gap-induced inductance
+            autoSentinelEnabled: true,
+            isFastDumping: false,
+            trajectoryHistory: [], // For phase space scatter chart
+            timeHistory: {
+                labels: [],
+                L: [],
+                F: []
+            },
+            timeTick: 0
+        };
+
+        // Material Constants (REBCO 2G-HTS Pancake Solenoid)
+        const PHYSICS_CONSTANTS = {
+            N_TURNS: 960,
+            RADIUS_BASE: 0.42,       // meters (42 cm inner radius)
+            HEIGHT_COIL: 0.65,       // meters
+            E_COMPOSITE: 175e9,      // Pa (175 GPa Hastelloy C-276 equivalent)
+            AREA_CROSS: 0.012 * 0.05, // effective structural ring cross-section
+            DELAM_CRIT_FORCE: 2.10,  // MN limit where delamination begins
+            ELASTIC_SLOPE: 0.0125    // H per MN normal elasticity
+        };
+
+        // DOM Tab Element Mapping
+        const tabMapping = {
+            'sim': { viewId: 'viewSim', btnId: 'tabBtnSim' },
+            'physics': { viewId: 'viewPhysics', btnId: 'tabBtnPhysics' },
+            'proposal': { viewId: 'viewProposal', btnId: 'tabBtnProposal' },
+            'arr': { viewId: 'viewARR', btnId: 'tabBtnARR' }
+        };
+
+        // Chart References
+        let phaseChart = null;
+        let timeLChart = null;
+        let timeFChart = null;
+
+        // Canvas references
+        const coilCanvas = document.getElementById('coilCanvas');
+        const ctx = coilCanvas ? coilCanvas.getContext('2d') : null;
+
+        // ==========================================
+        // TAB SWITCHING FUNCTIONALITY
+        // ==========================================
+        function switchTab(tabKey) {
+            state.activeTab = tabKey;
+
+            // Update views & button styling
+            Object.keys(tabMapping).forEach(key => {
+                const item = tabMapping[key];
+                const viewEl = document.getElementById(item.viewId);
+                const btnEl = document.getElementById(item.btnId);
+
+                if (key === tabKey) {
+                    viewEl.classList.remove('hidden');
+                    btnEl.className = "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center space-x-1.5 bg-cyan-500 text-black shadow-md";
+                } else {
+                    viewEl.classList.add('hidden');
+                    btnEl.className = "px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center space-x-1.5 text-gray-400 hover:text-white hover:bg-gray-800/60";
+                }
+            });
+
+            // Trigger MathJax re-render when switching tabs
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise().catch(err => console.error(err));
+            }
+
+            // If switching back to simulation, resize canvas and charts
+            if (tabKey === 'sim') {
+                setTimeout(() => {
+                    resizeCanvas();
+                    if (phaseChart) phaseChart.resize();
+                    if (timeLChart) timeLChart.resize();
+                    if (timeFChart) timeFChart.resize();
+                }, 50);
+            }
+        }
+
+        // ==========================================
+        // CANVAS ANIMATION & RENDERING
+        // ==========================================
+        function resizeCanvas() {
+            if (!coilCanvas) return;
+            const rect = coilCanvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            coilCanvas.width = rect.width * dpr;
+            coilCanvas.height = rect.height * dpr;
+            if (ctx) ctx.scale(dpr, dpr);
+        }
+
+        function drawCoilSimulation() {
+            if (!ctx || !coilCanvas) return;
+            const rect = coilCanvas.getBoundingClientRect();
+            const w = rect.width;
+            const h = rect.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            const centerX = w / 2;
+            const centerY = h / 2;
+
+            // Dynamic coil radius calculation
+            const baseVisualR = Math.min(w, h) * 0.28;
+            const expansion = (state.lorentzForce / 2.5) * 8; // visual elastic stretch
+            const delamOffset = state.delamMagnitude * 60;   // visual separation
+            const currentR = baseVisualR + expansion;
+
+            // Background cryostat vacuum container boundary
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, baseVisualR * 1.52, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Inner bore cryogenic support tube
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, baseVisualR * 0.65, 0, 2 * Math.PI);
+            ctx.fillStyle = '#080d1a';
+            ctx.fill();
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Draw concentric pancake winding layers
+            const layers = 9;
+            for (let i = 0; i < layers; i++) {
+                const layerR = currentR - 16 + (i * 4.2);
+                const isOuterDelaminated = (i >= layers - 2) && state.isDelaminated;
+                const activeR = isOuterDelaminated ? layerR + delamOffset : layerR;
+
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, activeR, 0, 2 * Math.PI);
+
+                if (isOuterDelaminated) {
+                    ctx.strokeStyle = '#f43f5e';
+                    ctx.lineWidth = 2.5;
+                    ctx.shadowColor = '#e11d48';
+                    ctx.shadowBlur = 10;
+                } else {
+                    const normI = Math.min(1, state.current / 5000);
+                    ctx.strokeStyle = `rgba(6, 182, 212, ${0.4 + normI * 0.6})`;
+                    ctx.lineWidth = 2;
+                    ctx.shadowColor = '#06b6d4';
+                    ctx.shadowBlur = 4;
+                }
+                ctx.stroke();
+                ctx.shadowBlur = 0; // reset
+            }
+
+            // Draw Lorentz Force vectors (cyan radial arrows outwards)
+            const arrowCount = 12;
+            const forceArrowLen = Math.min(38, 8 + (state.lorentzForce * 12));
+            const angleStep = (2 * Math.PI) / arrowCount;
+
+            for (let a = 0; a < arrowCount; a++) {
+                const theta = a * angleStep + (Date.now() * 0.0003); // gentle dynamic motion
+                const startX = centerX + Math.cos(theta) * (currentR + 18);
+                const startY = centerY + Math.sin(theta) * (currentR + 18);
+                const endX = centerX + Math.cos(theta) * (currentR + 18 + forceArrowLen);
+                const endY = centerY + Math.sin(theta) * (currentR + 18 + forceArrowLen);
+
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.strokeStyle = state.isDelaminated ? '#f43f5e' : '#38bdf8';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Arrowhead
+                const headLen = 4;
+                ctx.beginPath();
+                ctx.moveTo(endX, endY);
+                ctx.lineTo(
+                    endX - headLen * Math.cos(theta - Math.PI / 6),
+                    endY - headLen * Math.sin(theta - Math.PI / 6)
+                );
+                ctx.moveTo(endX, endY);
+                ctx.lineTo(
+                    endX - headLen * Math.cos(theta + Math.PI / 6),
+                    endY - headLen * Math.sin(theta + Math.PI / 6)
+                );
+                ctx.stroke();
+            }
+
+            // Center status label
+            ctx.font = '11px "JetBrains Mono", monospace';
+            ctx.fillStyle = '#64748b';
+            ctx.textAlign = 'center';
+            ctx.fillText('SOLENOID CORE', centerX, centerY - 6);
+            ctx.font = 'bold 12px "JetBrains Mono", monospace';
+            ctx.fillStyle = state.isDelaminated ? '#f43f5e' : '#06b6d4';
+            ctx.fillText(`${(state.lorentzForce).toFixed(2)} MN`, centerX, centerY + 12);
+        }
+
+        // ==========================================
+        // CHART.JS INITIALIZATION
+        // ==========================================
+        function initCharts() {
+            // Chart 1: Phase Space Scatter Chart (F vs L)
+            const ctxPhase = document.getElementById('phaseChart').getContext('2d');
+
+            // Generate nominal baseline line points (F: 0 to 3.0 MN)
+            const baselinePoints = [];
+            for (let f = 0; f <= 3.0; f += 0.2) {
+                baselinePoints.push({
+                    x: f,
+                    y: 5.0 + (f * PHYSICS_CONSTANTS.ELASTIC_SLOPE)
+                });
+            }
+
+            // Hazard Zone Line points
+            const hazardBoundary = [
+                { x: PHYSICS_CONSTANTS.DELAM_CRIT_FORCE, y: 5.0 },
+                { x: PHYSICS_CONSTANTS.DELAM_CRIT_FORCE, y: 5.15 },
+                { x: 3.0, y: 5.15 },
+                { x: 3.0, y: 5.0 }
+            ];
+
+            phaseChart = new Chart(ctxPhase, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Theoretical Elastic Corridor',
+                            data: baselinePoints,
+                            showLine: true,
+                            borderColor: '#38bdf8',
+                            borderWidth: 2,
+                            borderDash: [5, 4],
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: 'Delamination Fracture Hazard Zone',
+                            data: [
+                                { x: 2.1, y: 5.0 },
+                                { x: 2.1, y: 5.14 },
+                                { x: 3.0, y: 5.14 },
+                                { x: 3.0, y: 5.0 }
+                            ],
+                            showLine: true,
+                            borderColor: 'rgba(239, 68, 68, 0.6)',
+                            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                            borderWidth: 1.5,
+                            borderDash: [4, 4],
+                            fill: true,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Dynamic Trajectory History',
+                            data: [],
+                            showLine: true,
+                            borderColor: '#818cf8',
+                            borderWidth: 1.5,
+                            pointRadius: 2,
+                            pointBackgroundColor: '#818cf8',
+                            fill: false
+                        },
+                        {
+                            label: 'Live Operating Head (F, L)',
+                            data: [{ x: state.lorentzForce, y: state.measuredL }],
+                            pointRadius: 7,
+                            pointHoverRadius: 9,
+                            pointBackgroundColor: '#22d3ee',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#94a3b8',
+                                font: { family: 'JetBrains Mono', size: 10 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `F: ${context.parsed.x.toFixed(3)} MN, L: ${context.parsed.y.toFixed(4)} H`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Radial Lorentz Force F [MN]',
+                                color: '#94a3b8',
+                                font: { family: 'JetBrains Mono', size: 11 }
+                            },
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } },
+                            min: 0,
+                            max: 3.0
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Self-Inductance L [H]',
+                                color: '#94a3b8',
+                                font: { family: 'JetBrains Mono', size: 11 }
+                            },
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } },
+                            min: 4.99,
+                            max: 5.12
+                        }
+                    }
+                }
+            });
+
+            // Secondary Chart 1: Inductance vs Time
+            const ctxL = document.getElementById('timeSeriesLChart').getContext('2d');
+            timeLChart = new Chart(ctxL, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Inductance L (H)',
+                        data: [],
+                        borderColor: '#06b6d4',
+                        backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.2,
+                        fill: true,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { display: false },
+                        y: {
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 9 } }
+                        }
+                    }
+                }
+            });
+
+            // Secondary Chart 2: Force vs Time
+            const ctxF = document.getElementById('timeSeriesFChart').getContext('2d');
+            timeFChart = new Chart(ctxF, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Lorentz Force (MN)',
+                        data: [],
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.2,
+                        fill: true,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { display: false },
+                        y: {
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 9 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ==========================================
+        // DYNAMIC PHYSICS SIMULATION LOOP
+        // ==========================================
+        function physicsStep() {
+            // Check if fast dump is executing
+            if (state.isFastDumping) {
+                state.current = Math.max(0, state.current - 180);
+                if (state.current === 0) {
+                    state.isFastDumping = false;
+                }
+            } else {
+                // Normal current convergence toward slider target
+                const diMax = (state.rampRate * 0.04);
+                const diff = state.targetCurrent - state.current;
+                if (Math.abs(diff) < diMax) {
+                    state.current = state.targetCurrent;
+                } else if (diff > 0) {
+                    state.current += diMax;
+                } else {
+                    state.current -= diMax;
+                }
+            }
+
+            // Magnetic B-field approximation: B = mu0 * (N/L) * I
+            const bField = 0.001488 * state.current; // ~ 4.82 T at 3240 A
+
+            // Lorentz Force: proportional to I * B (thus I^2)
+            // F_r = k_f * I^2
+            const kF = 1.35e-7; // yields ~1.42 MN at 3240 A
+            state.lorentzForce = kF * (state.current * state.current);
+
+            // Circumferential Hoop Stress: sigma = F / (2 * pi * t * h)
+            state.hoopStress = Math.round(state.lorentzForce * 129.5); // MPa
+
+            // Check if force has exceeded critical threshold naturally
+            if (state.lorentzForce > PHYSICS_CONSTANTS.DELAM_CRIT_FORCE && !state.isDelaminated) {
+                triggerDelaminationNaturally();
+            }
+
+            // Inductance Calculation:
+            // L = L0 + (F * ElasticSlope) + DelaminationStep
+            const elasticIncrement = state.lorentzForce * PHYSICS_CONSTANTS.ELASTIC_SLOPE;
+            state.measuredL = state.L0 + elasticIncrement + state.delamMagnitude;
+
+            // Stored Energy: E = 0.5 * L * I^2
+            const storedEnergyMJ = (0.5 * state.measuredL * Math.pow(state.current, 2)) / 1e6;
+
+            // Autonomous Sentinel Check:
+            // If delta L/delta F exceeds threshold, trigger rapid ramp abort!
+            const dL_dF = PHYSICS_CONSTANTS.ELASTIC_SLOPE + (state.isDelaminated ? 0.045 : 0.0);
+            if (state.autoSentinelEnabled && state.isDelaminated && state.current > 600 && !state.isFastDumping) {
+                // Trip interlock
+                triggerFastDump();
+            }
+
+            // Update UI telemetry readouts
+            updateTelemetryDOM(bField, storedEnergyMJ, dL_dF);
+
+            // Record dynamic history
+            recordTelemetryPoint();
+
+            // Render visual canvas
+            drawCoilSimulation();
+        }
+
+        function updateTelemetryDOM(bField, storedEnergyMJ, dL_dF) {
+            document.getElementById('currentMetric').innerText = Math.round(state.current).toLocaleString();
+            document.getElementById('bFieldMetric').innerText = `${bField.toFixed(2)} T`;
+            document.getElementById('energyMetric').innerText = `${storedEnergyMJ.toFixed(1)} MJ`;
+            document.getElementById('diMetric').innerText = `${state.rampRate} A/s`;
+
+            document.getElementById('forceMetric').innerText = state.lorentzForce.toFixed(2);
+            document.getElementById('hoopStressMetric').innerText = `${state.hoopStress} MPa`;
+            document.getElementById('inductanceMetric').innerText = state.measuredL.toFixed(4);
+
+            const dlDfEl = document.getElementById('dlDfMetric');
+            if (state.isDelaminated) {
+                dlDfEl.innerText = `+${dL_dF.toFixed(3)} H/MN [DISCONTINUITY]`;
+                dlDfEl.className = 'text-rose-400 font-bold';
+            } else {
+                dlDfEl.innerText = `+${dL_dF.toFixed(3)} H/MN (Elastic)`;
+                dlDfEl.className = 'text-emerald-400 font-semibold';
+            }
+
+            // Status badges
+            const topBadge = document.getElementById('topStatusBadge');
+            const topText = document.getElementById('topStatusText');
+            const delamOverlay = document.getElementById('delamAlertOverlay');
+            const delamRiskBadge = document.getElementById('delamRiskBadge');
+            const slopeInd = document.getElementById('slopeIndicator');
+            const shearStatus = document.getElementById('shearStatus');
+
+            if (state.isDelaminated) {
+                topBadge.className = 'flex items-center space-x-2 px-3 py-1 rounded-full border border-rose-500/50 bg-rose-950/40 text-rose-300 text-xs font-mono-code glow-rose';
+                topText.innerText = 'DELAMINATION DETECTED &bull; INTERLOCK TRIPPED';
+                delamOverlay.classList.remove('hidden');
+                delamRiskBadge.innerText = 'CRITICAL FAULT';
+                delamRiskBadge.className = 'text-[10px] font-mono-code px-2 py-0.5 rounded bg-rose-950 border border-rose-600 text-rose-300 font-bold animate-pulse';
+                slopeInd.innerText = 'Discontinuous Slope Jump!';
+                slopeInd.className = 'text-rose-400 font-bold animate-pulse';
+                shearStatus.innerText = 'Shear Slip (>25 MPa)';
+                shearStatus.className = 'text-xs font-mono-code text-rose-400 font-semibold';
+            } else if (state.lorentzForce > 1.8) {
+                topBadge.className = 'flex items-center space-x-2 px-3 py-1 rounded-full border border-amber-500/40 bg-amber-950/30 text-amber-300 text-xs font-mono-code';
+                topText.innerText = 'HIGH HOOP TENSION';
+                delamOverlay.classList.add('hidden');
+                delamRiskBadge.innerText = 'ELEVATED STRESS';
+                delamRiskBadge.className = 'text-[10px] font-mono-code px-2 py-0.5 rounded bg-amber-950 border border-amber-600 text-amber-300 font-bold';
+                slopeInd.innerText = 'Elastic Linear';
+                slopeInd.className = 'text-cyan-400 font-bold';
+                shearStatus.innerText = '18.4 MPa (Moderate)';
+                shearStatus.className = 'text-xs font-mono-code text-amber-400 font-semibold';
+            } else {
+                topBadge.className = 'flex items-center space-x-2 px-3 py-1 rounded-full border border-emerald-500/30 bg-emerald-950/30 text-emerald-400 text-xs font-mono-code';
+                topText.innerText = 'NOMINAL HOOP STRAIN';
+                delamOverlay.classList.add('hidden');
+                delamRiskBadge.innerText = 'HEALTHY';
+                delamRiskBadge.className = 'text-[10px] font-mono-code px-2 py-0.5 rounded bg-emerald-950 border border-emerald-700 text-emerald-300 font-bold';
+                slopeInd.innerText = 'Elastic Linear';
+                slopeInd.className = 'text-cyan-400 font-bold';
+                shearStatus.innerText = '14.2 MPa (Safe)';
+                shearStatus.className = 'text-xs font-mono-code text-emerald-400 font-semibold';
+            }
+        }
+
+        function recordTelemetryPoint() {
+            state.timeTick++;
+
+            // Record phase space head
+            if (state.trajectoryHistory.length > 35) {
+                state.trajectoryHistory.shift();
+            }
+            state.trajectoryHistory.push({
+                x: parseFloat(state.lorentzForce.toFixed(3)),
+                y: parseFloat(state.measuredL.toFixed(4))
+            });
+
+            // Update Time Series buffers
+            if (state.timeHistory.labels.length > 25) {
+                state.timeHistory.labels.shift();
+                state.timeHistory.L.shift();
+                state.timeHistory.F.shift();
+            }
+            state.timeHistory.labels.push(state.timeTick);
+            state.timeHistory.L.push(state.measuredL);
+            state.timeHistory.F.push(state.lorentzForce);
+
+            // Throttle chart rendering to every 3 physics ticks
+            if (state.timeTick % 3 === 0 && state.activeTab === 'sim') {
+                if (phaseChart) {
+                    phaseChart.data.datasets[2].data = state.trajectoryHistory;
+                    phaseChart.data.datasets[3].data = [{
+                        x: state.lorentzForce,
+                        y: state.measuredL
+                    }];
+                    phaseChart.update('none');
+                }
+
+                if (timeLChart) {
+                    timeLChart.data.labels = state.timeHistory.labels;
+                    timeLChart.data.datasets[0].data = state.timeHistory.L;
+                    timeLChart.update('none');
+                    document.getElementById('tsInductanceVal').innerText = `${state.measuredL.toFixed(4)} H`;
+                }
+
+                if (timeFChart) {
+                    timeFChart.data.labels = state.timeHistory.labels;
+                    timeFChart.data.datasets[0].data = state.timeHistory.F;
+                    timeFChart.update('none');
+                    document.getElementById('tsForceVal').innerText = `${state.lorentzForce.toFixed(2)} MN`;
+                }
+            }
+        }
+
+        // ==========================================
+        // FAULT INJECTION & INTERLOCK HANDLERS
+        // ==========================================
+        function triggerDelaminationNaturally() {
+            state.isDelaminated = true;
+            state.delamMagnitude = 0.038; // sudden step in Henry
+        }
+
+        function injectDelaminationFault() {
+            if (state.isDelaminated) {
+                // Reset
+                state.isDelaminated = false;
+                state.delamMagnitude = 0;
+            } else {
+                // Inject
+                state.isDelaminated = true;
+                state.delamMagnitude = 0.042; // Sudden +42 mH jump
+            }
+        }
+
+        function triggerFastDump() {
+            state.isFastDumping = true;
+            state.targetCurrent = 0;
+            document.getElementById('currentSlider').value = 0;
+            document.getElementById('sliderCurrentVal').innerText = '0 A (ABORTING)';
+        }
+
+        // ==========================================
+        // UI EVENT LISTENERS
+        // ==========================================
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize Lucide icons
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+
+            // Initialize Charts
+            initCharts();
+
+            // Set up Canvas
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            // Controls
+            const currentSlider = document.getElementById('currentSlider');
+            const rateSlider = document.getElementById('rateSlider');
+            const autoToggle = document.getElementById('autoSentinelToggle');
+
+            currentSlider.addEventListener('input', (e) => {
+                state.targetCurrent = parseFloat(e.target.value);
+                document.getElementById('sliderCurrentVal').innerText = `${Math.round(state.targetCurrent)} A`;
+                state.isFastDumping = false;
+            });
+
+            rateSlider.addEventListener('input', (e) => {
+                state.rampRate = parseFloat(e.target.value);
+                document.getElementById('sliderRateVal').innerText = `${state.rampRate} A/s`;
+            });
+
+            autoToggle.addEventListener('change', (e) => {
+                state.autoSentinelEnabled = e.target.checked;
+                const modeBadge = document.getElementById('controllerModeBadge');
+                if (state.autoSentinelEnabled) {
+                    modeBadge.innerText = 'AUTO-SENTINEL ACTIVE';
+                    modeBadge.className = 'text-[11px] font-mono-code px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800';
+                } else {
+                    modeBadge.innerText = 'MANUAL OVERRIDE (UNGUARDED)';
+                    modeBadge.className = 'text-[11px] font-mono-code px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800';
+                }
+            });
+
+            // Start Animation and Simulation loop
+            setInterval(physicsStep, 40); // 25 Hz update cycle
+        });
+    </script>
+</body>
+</html>
